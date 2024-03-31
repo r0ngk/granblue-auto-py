@@ -16,7 +16,7 @@ class CombatModeV2:
     """
 
     actions = {}
-    turn = 1
+    always_reload = False
 
     @staticmethod
     def _exit():
@@ -282,7 +282,6 @@ class CombatModeV2:
             "reload": CombatModeV2._reload,
             "attack": CombatModeV2._attack,
             "wait": CombatModeV2._wait,
-            "_sub_reload": CombatModeV2._sub_reload,
             "_wait_for_end": CombatModeV2._wait_for_end,
             "requestbackup": CombatMode._request_backup,
             "tweetbackup": CombatMode._tweet_backup,
@@ -344,7 +343,69 @@ class CombatModeV2:
         Game._move_mouse_security_check()
         while not CombatModeV2._is_battle_end():
             sleep(5)
+
+    @staticmethod
+    def _ready_page(to_start_auto = False) -> bool:
+        """attempt to click on ready page to start full/semi auto if needed
+        else try to catch if bot enter ready page
+
+        Returns:
+           if sure auto success
+        """
+        if ImageUtils.confirm_location("auto_ready", tries=15):
+            Log.print_message(f"[Combat] Entering Ready Page")
+
+        if to_start_auto:
+            pya.mouseDown()
+            sleep(random.uniform(0.02, 0.12))
+            pya.mouseUp()
+
+            if ImageUtils.confirm_location("auto_enabled", tries=5):
+                Log.print_message(f"[Combat] Auto enabled")
+                return True
+        return False
+
+    @staticmethod
+    def _start_turn(turn, auto_mode=None, start_from_loading_page=False):
+
+        turn_actions = CombatModeV2.actions[turn]
+        need_to_auto = False
         
+        # first action in that turn -> func name
+        first_action = turn_actions[0][0]
+        if first_action == CombatModeV2._enable_semi_auto or \
+            auto_mode == 'semi':
+            return CombatModeV2._start_semi_auto_turn(turn, start_from_loading_page)
+        elif first_action == CombatModeV2._enable_full_auto:
+            need_to_auto = True
+
+        if start_from_loading_page:
+            sure_auto = CombatModeV2._ready_page(need_to_auto)
+            if ImageUtils.find_button("heal", tries=50):
+                Log.print_message(f"[Combat] Entering combact page")
+            else:
+                raise RuntimeError("Failed to find heal button")
+
+    @staticmethod
+    def _start_semi_auto_turn(turn, start_from_loading_page):
+
+        if start_from_loading_page:
+            sure_auto = CombatModeV2._ready_page(True)
+            if ImageUtils.find_button("heal", tries=50):
+                Log.print_message(f"[Combat] Entering combact page")
+            else:
+                raise RuntimeError("Failed to find heal button")
+            
+        if ImageUtils.find_button("semi_auto_enabled", tries=50):
+            Log.print_message(f"[Combat] Semi Auto successfully start")
+            ImageUtils.find_button("heal_disabled", tries=100)
+            Log.print_message(f"[Combat] attacked in Semi Auto ")
+            sleep(random.uniform(0.1,1))
+        else:
+            CombatModeV2._attack()
+
+
+
     @staticmethod
     def start_combat_mode() -> bool:
         """Start Combat Mode.
@@ -357,35 +418,10 @@ class CombatModeV2:
         Log.print_message(f"[COMBAT] Starting Combat Mode.")
         Log.print_message("######################################################################")
         Log.print_message("######################################################################\n")
-
-        # check action in first turn -> first action in that turn -> func name
-        first_action = CombatModeV2.actions[CombatModeV2.turn][0][0]
-       
-        if first_action == CombatModeV2._enable_semi_auto:
-            auto_status = 1
-        elif first_action == CombatModeV2._enable_full_auto:
-            auto_status = 2
-        else:
-            auto_status = 0 # enum, 0 for nothin, 1 for semi, 2 for full
-
-        if ImageUtils.confirm_location("auto_ready", tries=15):
-            Log.print_message(f"[Combat] Entering Ready Page")
-
-            if auto_status != 0:
-                pya.mouseDown()
-                sleep(random.uniform(0.02, 0.12))
-                pya.mouseUp()
-
-                if ImageUtils.confirm_location("auto_enabled", tries=5):
-                    Log.print_message(f"[Combat] Auto enabled")
-                    auto_status += 2 # enum for sucess, 3->semi, 4->full
-        else:
-            auto_status = 0
         
-        if ImageUtils.find_button("heal", tries=50):
-            Log.print_message(f"[Combat] Entering combact page")
-        else:
-            return False
+        CombatModeV2._start_turn(1, start_from_loading_page=True)
+ 
+        # use heal button to determine enter battle
         
         if auto_status != 1 and auto_status != 3:
             # check for attack button if doesn't try to enable semi auto
@@ -393,15 +429,7 @@ class CombatModeV2:
                 Log.print_message(f"[Combat] Enemy Animation finish")
             else:
                 return False
-        else:
-            # this can be improve by checking togther with attack button
-            if ImageUtils.find_button("semi_auto_enabled", tries=50):
-                Log.print_message(f"[Combat] Semi Auto successfully start")
-                ImageUtils.find_button("heal_disabled", tries=100)
-                Log.print_message(f"[Combat] attacked in Semi Auto ")
-                sleep(random.uniform(0.1,1))
-            else:
-                CombatModeV2._attack()
+
         # if not sure whether full auto is enabled
         if auto_status == 2:
             if ImageUtils.find_button("full_auto_enabled", tries=3):
@@ -411,7 +439,7 @@ class CombatModeV2:
 
         # reuse the variable to decide if first enable auto should be skip
         action_start_idx = min(auto_status, 1)
-        # excute chain actions
+
         for action in CombatModeV2.actions[action_start_idx:]:
             action[0](**action[1])
 
