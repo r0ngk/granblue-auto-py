@@ -14,77 +14,53 @@ class GenericV2:
     """
 
     @staticmethod
+    def get_info(raid):
+        """ Extract information to start a battle, and load user script
+        """
+        info = raid['info']
+        combact_actions = raid['combact_actions']
+        Combat.load_actions(combact_actions)
+
+        url = info.get('url')
+        support_summon = [info.get('summon')]
+        if support_summon is None:
+            support_summon = Settings.summon_list
+        repeat = info.get('repeat')
+        if repeat is None:
+            repeat = Settings.item_amount_to_farm
+
+        return (url, support_summon, repeat)
+
+    @staticmethod
     def start():
 
         from bot.game import Game
         ImageUtils._summon_selection_first_run = False
 
         Log.print_message(f"[GenericV2] Parsing combat script: {Settings.combat_script_name}")
-        battles_seq = Parser.parse_battles(Settings.combat_script)
+        list_of_raids = Parser.parse_raids(Settings.combat_script)
 
-        for battle in battles_seq:
+        for raid_id in list_of_raids:
 
-            config, actions = battle
-            url, summon, repeat = config
+            url, support_summon, repeat = GenericV2.get_info(list_of_raids[raid_id])
         
             Log.print_message(f"[GenericV2] Start battle:{url}, total of {repeat} times")
+            Window.goto(url)
+            # Window.sub_prepare_loot()
+        
+            for i in range (1, repeat):
+                Log.print_message(f"[GenericV2] Repeat for {i} times")
+                GenericV2.single_battle(support_summon)  
+                GenericV2.battle_exit_handler(i==1, url)       
+                Game._delay_between_runs()
+                if (np.random.rand() > .9):
+                    Game._move_mouse_security_check()
 
-            if actions[-1][0] == "subback":
-                # first time
-                Log.print_message(f"[GenericV2] First run with support window")
-                if Window.sub_start == None:
-                    raise RuntimeError("There are no support Window.")
-
-                Window.goto(url)
-                Window.sub_prepare_loot()
-                # reload instead of back for first time
-                Combat.load_actions(actions[:-1] + [("_sub_reload",{})])
-                # start first time
-                GenericV2.single_battle_sub_back(summon)         
-                # load the original script
-                Combat.load_actions(actions)
-
-                for i in range (1, repeat):
-                    Log.print_message(f"[GenericV2] Repeat for {i} times")
-                    GenericV2.single_battle_sub_back(summon)         
-                    Game._delay_between_runs()
-                    if (np.random.rand() > .9):
-                        Game._move_mouse_security_check()
-    
-            else:
-                if ("enablefullauto",{}) in actions:
-                    actions.append(('_wait_for_end' ,{}))
-                Combat.load_actions(actions)
-                
-                for i in range (0, repeat):
-
-                    Log.print_message(f"[GenericV2] Repeat for {i+1} times")
-                    Window.goto(url)
-                    
-                    GenericV2.single_battle(summon)
-                    Game._delay_between_runs()
-
-                    if (np.random.rand() > .9):
-                        Game._move_mouse_security_check()
 
         Log.print_message(f"GenericV2 successfully finish!")
 
-    
-
     @staticmethod
-    def single_battle_sub_back(support_summon: str):
-        from bot.game import Game
-        """ Method to do single raid only with getting loot in the sub window
-
-        support_summon: string of the support summon
-        """
-        GenericV2.single_battle(support_summon)
-        if not ImageUtils.find_button("ok", tries = 30, is_sub=True):
-            raise RuntimeError("Failed to reach loot page")
-        Game.find_and_click_button("home_back")
-
-    @staticmethod
-    def single_battle(support_summon: str):
+    def single_battle(support_summon):
         from bot.game import Game
         """ Standart method to do a battle
         """
@@ -96,8 +72,25 @@ class GenericV2:
             raise RuntimeError("Failed to select summon")
         if not Game.find_and_click_button("ok", tries = 30, custom_wait=np.random.uniform(0.1,0.5)):
             raise RuntimeError("Failed to confirm team")
+        # move to a random place
         MouseUtils.move_to(Window.start+10 + np.random.randint(Window.width-20), 
                            Window.top+10 + np.random.randint(Window.height-100))
         if not Combat.start_combat_mode():
             raise RuntimeError("Failed to start combat mode")
-            
+
+    @staticmethod
+    def battle_exit_handler(is_first_time, url):
+        """ Exit a battle and prepare for the next
+        """
+        from bot.game import Game
+        if Window.sub_start is None:
+            if is_first_time:
+                Window.sub_prepare_loot()
+            else:
+                Combat._sub_back()
+            if not ImageUtils.find_button("ok", tries = 30, is_sub=True):
+                raise RuntimeError("Failed to reach loot page")
+            Game.find_and_click_button("home_back")
+        else:
+            Combat._reload()
+            Window.goto(url)

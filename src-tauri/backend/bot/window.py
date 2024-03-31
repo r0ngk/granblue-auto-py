@@ -56,6 +56,10 @@ class Window():
         """
         Window.goto("https://game.granbluefantasy.jp/#quest/index",
                     is_sub=True)
+    
+    @staticmethod
+    def _sub_reload():
+        Window.reload(is_sub=True, is_focus=False)
 
     @staticmethod
     def reload(is_sub: bool = False, is_focus: bool = True) -> None:

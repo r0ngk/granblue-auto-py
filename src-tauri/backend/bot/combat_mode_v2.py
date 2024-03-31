@@ -15,7 +15,15 @@ class CombatModeV2:
     """ This is a class that manager everything inside a battle
     """
 
-    actions = []
+    actions = {}
+    turn = 1
+
+    @staticmethod
+    def _exit():
+        """To exit or finish the raid
+
+        Returns:
+        """
 
     @staticmethod
     def _enable_auto() -> bool:
@@ -210,7 +218,7 @@ class CombatModeV2:
 
     @staticmethod
     def _sub_back():
-        """Presses the Back button.
+        """Presses the Back button on sub window.
         """
         x, y = ImageUtils.find_button("home_back", tries = 30, is_sub=True)    
         MouseUtils.move_and_click_point(
@@ -218,10 +226,6 @@ class CombatModeV2:
         )
     
         Log.print_message("[COMBAT] Tapped the Back button of sub Window.")
-    
-    @staticmethod
-    def _sub_reload():
-        Window.reload(is_sub=True, is_focus=False)
 
     @staticmethod
     def _reload():
@@ -257,12 +261,12 @@ class CombatModeV2:
         sleep(time)
     
     @staticmethod
-    def load_actions(actions):
+    def load_actions(combact_actions):
         """ Check the string list and load the actions chain into the combat mode
 
         actions: list of tuple of function name and parameter
         """
-        fun = {
+        map_fun = {
             "quicksummon": CombatModeV2._quick_summon,
             "usesummon": CombatModeV2._use_summon,
             "enablefullauto": CombatModeV2._enable_full_auto,
@@ -272,7 +276,8 @@ class CombatModeV2:
             "changechar": CombatModeV2._change_select_char,
             "useskill": CombatModeV2._use_skill,
             "target": CombatModeV2._skill_target,
-            "subback": CombatModeV2._sub_back,
+            "subback": CombatModeV2._exit,
+            "exit": CombatModeV2._exit,
             "deselectchar": CombatModeV2._deselect_char,
             "reload": CombatModeV2._reload,
             "attack": CombatModeV2._attack,
@@ -282,11 +287,17 @@ class CombatModeV2:
             "requestbackup": CombatMode._request_backup,
             "tweetbackup": CombatMode._tweet_backup,
         }
-        CombatModeV2.actions = []
-        for action in actions:
-            CombatModeV2.actions.append(
-                (fun[action[0]] , action[1])
-            )
+        CombatModeV2.actions = {}
+        for turn, turn_actions in combact_actions:
+            mapped_turn_actions = []
+            # turn action is a single item dict
+            for turn_action in turn_actions:
+                # fun name is the str and fun param is a dict
+                [(fun_name, fun_param)] = turn_action.items()
+                mapped_turn_actions.append((map_fun[fun_name], fun_param))
+            
+            CombatModeV2.actions[turn] = mapped_turn_actions
+            
         Log.print_message(
             f"[COMBAT] Action Loaded: Size {len(CombatModeV2.actions)}")
 
@@ -347,11 +358,12 @@ class CombatModeV2:
         Log.print_message("######################################################################")
         Log.print_message("######################################################################\n")
 
-        first_action = CombatModeV2.actions[0]
+        # check action in first turn -> first action in that turn -> func name
+        first_action = CombatModeV2.actions[CombatModeV2.turn][0][0]
        
-        if first_action[0] == CombatModeV2._enable_semi_auto:
+        if first_action == CombatModeV2._enable_semi_auto:
             auto_status = 1
-        elif first_action[0] == CombatModeV2._enable_full_auto:
+        elif first_action == CombatModeV2._enable_full_auto:
             auto_status = 2
         else:
             auto_status = 0 # enum, 0 for nothin, 1 for semi, 2 for full
